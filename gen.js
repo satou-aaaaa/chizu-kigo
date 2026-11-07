@@ -44,16 +44,24 @@
 
   // 今日の5問：全部の記号を種で並べた列を、1日5つずつ前から使う（1周するまで同じ記号は出ない）
   const dayIndex = (date) => Math.round((Date.parse(date) - Date.parse(EPOCH)) / 864e5);
+  // 周のつなぎ目の日に前の周の記号が重なるときは、新しい周の中で後ろの記号と入れかえる（どの周も39個を1回ずつ出す）
   const cyc = {};
-  const cycle = (c) => cyc[c] || (cyc[c] = shuffle(rng(seedOf("cycle:" + c)), [...Array(DAILY_N).keys()]));
-  // 周のつなぎ目で同じ記号が重なったら、その日のぶんは新しい周のおしりから借りる
+  function cycle(c) {
+    if (cyc[c]) return cyc[c];
+    const a = shuffle(rng(seedOf("cycle:" + c)), [...Array(DAILY_N).keys()]);
+    const start = c * DAILY_N, head = (5 - (start % 5)) % 5;
+    if (c > 0 && head > 0) {
+      const prev = cycle(c - 1), old = prev.slice(DAILY_N - (5 - head));
+      for (let j = 0; j < head; j++) if (old.includes(a[j])) {
+        const k = a.findIndex((w, i) => i >= head && !old.includes(w));
+        [a[j], a[k]] = [a[k], a[j]];
+      }
+    }
+    return (cyc[c] = a);
+  }
   function dailySyms(date) {
     const n = Math.max(0, dayIndex(date)), out = [];
-    for (let p = n * 5; p < n * 5 + 5; p++) {
-      const c = Math.floor(p / DAILY_N); let w = cycle(c)[p % DAILY_N];
-      for (let k = DAILY_N - 1; out.includes(w); k--) w = cycle(c)[k];
-      out.push(w);
-    }
+    for (let p = n * 5; p < n * 5 + 5; p++) out.push(cycle(Math.floor(p / DAILY_N))[p % DAILY_N]);
     return out;
   }
   // 5つのうち、形のわけにできる最後の1つをむずかしいに。残りを前から記号よみ2・記号さがし2

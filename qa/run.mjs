@@ -82,6 +82,12 @@ const optsKey = (P) => P.opts.join("/");
   check("今日の5問（記号よみ2・記号さがし2・形のわけ1。形のわけにできる記号が無い日だけ記号よみ3）と上級（形のわけ3・今日と重ならない）を3年分作れる", bad.length === 0, bad.slice(0, 5).join(","));
   check("今日の5問の5問目はほとんどの日で形のわけ（ない日は3年で5日まで）", noHard <= 5, `${noHard}日`);
   check(`今日の5問は、はじめの${Math.floor(G.DAILY_N / 5)}日で同じ記号を出さない（全部を一回りしてから次の周）`, dup === 0, dup);
+  // 周のつなぎ目の日でも、どの周も全部の記号を1回ずつ出す（2026-11-07 CodeRabbit：借りた記号が周の中で2回出ていた）
+  const seq = [];
+  for (let d = 0; d < 1100; d++) seq.push(...G.dailySyms(new Date(start + d * 864e5).toISOString().slice(0, 10)));
+  let badCycle = 0;
+  for (let c = 0; (c + 1) * G.DAILY_N <= seq.length; c++) if (new Set(seq.slice(c * G.DAILY_N, (c + 1) * G.DAILY_N)).size !== G.DAILY_N) badCycle++;
+  check("今日の5問の並びは、どの周（39問ずつ）も全部の記号を1回ずつ出す（3年分）", badCycle === 0, `${badCycle}周`);
   // 過去の日の問題が変わらない（data.js・gen.js を変えたら、ここの値が変わる。変えるなら PR に理由を書く）
   const snap = JSON.parse(readFileSync(path.join(root, "qa", "daily-snapshot.json"), "utf8"));
   const now = Object.fromEntries(Object.keys(snap).map((k) => [k, [...G.dailyTags(k), ...G.hardTags(k)].map((t) => `${t}=${optsKey(G.make(t))}`)]));
