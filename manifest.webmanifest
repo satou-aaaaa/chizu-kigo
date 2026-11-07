@@ -1,0 +1,16 @@
+{
+  "name": "地図記号よみ",
+  "short_name": "地図記号よみ",
+  "description": "地図記号を見て、何の場所かと形のわけを当てる1日5問",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#eef2e6",
+  "theme_color": "#eef2e6",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
