@@ -446,25 +446,32 @@ function load() {
     if (x === undefined || y === undefined) { if (x || y) s.runs[m] = x || y; continue; }
     if (!x || !y) { const r = x || y; if (!r || bank(s, r) || doneOf(r)) continue; const bd = bookOf(s, r.mode); if (bd && !bd[r.date]) s.runs[m] = r; continue; }
     if (x.id !== y.id && x.date !== y.date) { const [w, l] = x.date > y.date ? [x, y] : [y, x]; bank(s, l); s.runs[m] = w; }
-    else if (x.id === y.id) { const px = prog(x), py = prog(y); s.runs[m] = px > py ? x : py > px ? y : n.runs[m]; }
+    else if (x.id === y.id) {
+      const px = prog(x), py = prog(y), w = px > py ? x : py > px ? y : n.runs[m], o = w === x ? y : x;
+      // 同じ回・同じ問題の途中なら、両方のまちがい・ヒントを合わせる（片方のまちがいを消して★を多くしない）
+      if (w && o && w.cur && o.cur && w.res.length === o.res.length && w.cur.i === o.cur.i && w.cur.tag === o.cur.tag) s.runs[m] = { ...w, cur: { ...w.cur, wrong: [...new Set([...(w.cur.wrong || []), ...(o.cur.wrong || [])])], hints: Math.max(+w.cur.hints || 0, +o.cur.hints || 0) } };
+      else s.runs[m] = w;
+    }
   }
   return tidy(s);
 }
 // 引き継ぎコードなどから入った値を正しい形に直す（数の所に文字が入っていても画面に出さない）
-const num = (v) => (Number.isFinite(+v) && +v >= 0 ? Math.floor(+v) : 0);
-const okTag = (t) => { if (typeof t !== "string") return false; const [k, w] = t.split("|"); return Object.prototype.hasOwnProperty.call(G.BY, k) && /^\d+$/.test(w) && +w < NSYMS; };
+const num = (v) => { let n; try { n = Number(v); } catch (e) { return 0; } return Number.isFinite(n) && n >= 0 ? Math.floor(n) : 0; }; // 数にできない値（toString が壊れたものなど）も0に
+const okTag = (t) => { if (typeof t !== "string") return false; const [k, w] = t.split("|"); return Object.prototype.hasOwnProperty.call(G.BY, k) && /^(0|[1-9]\d*)$/.test(w) && +w < NSYMS && (k !== "g2" || G.hasWhy(G.SYMS[+w])); };
 function tidy(s) {
   s.ebest = num(s.ebest);
   for (const q of RECS) if (!s[q] || typeof s[q] !== "object" || Array.isArray(s[q])) s[q] = {};
-  for (const k in s.dex) { if (!/^\d+$/.test(k) || +k >= NSYMS) delete s.dex[k]; else s.dex[k] = num(s.dex[k]); }
+  for (const k in s.dex) { if (!/^(0|[1-9]\d*)$/.test(k) || +k >= NSYMS) delete s.dex[k]; else s.dex[k] = num(s.dex[k]); }
   // 日付と日ごとの記録の形も確かめ、壊れたものは捨てる（細工した引き継ぎコードで画面が止まらないように）
   const okDate = (v) => { if (typeof v !== "string" || !/^\d{4}-\d\d-\d\d$/.test(v)) return false; const t = Date.parse(v + "T00:00:00Z"); return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === v; };
   const okRec = (x) => !!x && typeof x === "object" && Array.isArray(x.m) && x.m.every((v) => Number.isInteger(v) && v >= 0);
-  for (const b of [s.days, s.hdays, s.adays]) for (const d in b) if (!okDate(d) || !okRec(b[d])) delete b[d];
+  // 問題の数もそろっているものだけ（空の記録で今日の5問を終えた扱いにしない）
+  const NQ = { d: 5, a: 5, h: 3, p: 5 };
+  for (const [b, n] of [[s.days, 5], [s.hdays, 3], [s.adays, 5]]) for (const d in b) if (!okDate(d) || !okRec(b[d]) || b[d].m.length !== n) delete b[d];
   const okIds = (a) => Array.isArray(a) && a.every((x) => Number.isInteger(x) && x >= 0 && x < NSYMS);
   for (const m in s.runs) {
     const r = s.runs[m]; if (r === null) continue;
-    if (typeof r !== "object" || !["d", "h", "p", "e", "a"].includes(r.mode) || runKey(r.mode, r.date) !== m || !okDate(r.date) || !Array.isArray(r.list) || !r.list.every(okTag) || !Array.isArray(r.res) || !r.res.every((x) => x && typeof x === "object" && Number.isInteger(x.m) && x.m >= 0)) { delete s.runs[m]; continue; }
+    if (typeof r !== "object" || !["d", "h", "p", "e", "a"].includes(r.mode) || runKey(r.mode, r.date) !== m || !okDate(r.date) || !Array.isArray(r.list) || !r.list.length || (NQ[r.mode] && r.list.length !== NQ[r.mode]) || !r.list.every(okTag) || !Array.isArray(r.res) || !r.res.every((x) => x && typeof x === "object" && Number.isInteger(x.m) && x.m >= 0)) { delete s.runs[m]; continue; }
     if (r.cur != null && (typeof r.cur !== "object" || !okIds(r.cur.wrong))) r.cur = null; else if (r.cur) r.cur.hints = num(r.cur.hints);
   }
   return s;
@@ -588,6 +595,7 @@ function startRun(mode, opt) {
     else if (G.BY[opt]) list = practiceList(opt, s);
     else if (/^c:[a-z]$/.test(String(opt)) && G.CATS[opt.slice(2)]) list = catList(opt.slice(2));
     else list = practiceList("g0", s);
+    bank(s, s.runs[mode]); // 別のタブで終えた前の日の回を、上書きする前に記録へ
     s.runs[mode] = { mode, date: k, list, res: [], cur: null, id: rid(), a0: achGot(s) };
   });
   if (ng) return cal();
@@ -621,11 +629,15 @@ function play() {
   cur = { i, date: run.date, id: run.id, tag, P, wrong: (saved.wrong || []).filter((v) => P.opts.includes(v) && v !== P.ans), hints: Math.min(saved.hints || 0, 2), done: false };
   const label = `${run.mode === "d" ? "" : run.mode === "a" ? "あとから・" : hard ? "上級・" : run.mode === "e" ? "とことん・" : "練習・"}${P.name}`;
   const showTip = (run.mode === "d" || run.mode === "a") && i === 0, tip = tipOf(run.date);
+  // 「🔊 読む」用の文：問いと、記号の形（名前は言わない）と、選び肢を読む
+  const say = P.kind === "b1"
+    ? `この場所の地図記号はどれ？ ${x.n}。選び肢：${P.opts.map((v, j) => `${j + 1}つ目、${G.SYMS[v].alt}`).join("。")}`
+    : `${P.kind === "g2" ? `${x.n}の記号。この形は、何からできた？` : "この記号は、何の場所？"} 記号の形：${x.alt}。選び肢：${P.opts.map((v) => (P.kind === "g2" ? G.SYMS[v].k : G.SYMS[v].n)).join("、")}`;
   const body = P.kind === "b1"
-    ? `<p class="q">この場所の地図記号はどれ？</p><p class="ja" data-a11y-say>${esc(x.n)}</p>`
+    ? `<p class="q" data-a11y-say aria-label="${esc(say)}">この場所の地図記号はどれ？</p><p class="ja">${esc(x.n)}</p>`
     : P.kind === "g2"
-      ? `<p class="q" data-a11y-say aria-label="${esc(x.n)}の記号。この形は、何からできた？">この形は、何からできた？</p>${symHtml(x, "sym bigsym")}<p class="kk">${esc(x.n)}</p>`
-      : `<p class="q" data-a11y-say>この記号は、何の場所？</p>${symHtml(x, "sym bigsym")}`;
+      ? `<p class="q" data-a11y-say aria-label="${esc(say)}">この形は、何からできた？</p>${symHtml(x, "sym bigsym")}<p class="kk">${esc(x.n)}</p>`
+      : `<p class="q" data-a11y-say aria-label="${esc(say)}">この記号は、何の場所？</p>${symHtml(x, "sym bigsym")}`;
   const optHtml = (v, j) => { const o = G.SYMS[v]; return P.kind === "b1" ? `<button class="ch" data-j="${j}" aria-label="記号：${esc(o.alt)}">${symPlain(o)}</button>` : `<button class="ch" data-j="${j}">${esc(P.kind === "g2" ? o.k : o.n)}</button>`; };
   app.innerHTML = `
     <header><button class="icon" id="back" aria-label="もどる">←</button>
@@ -835,7 +847,7 @@ function about() {
   $("back").onclick = home; bindFooter(); toTop();
 }
 
-window.__gg = { mode: () => MODE, load, save, todayKey, dayNo, lateDays, ACH, achGot, nextAch, tally, shareText, streak, endlessList, practiceList, catList, TIPS, cur: () => cur, play: (m) => { if (m) MODE = m; play(); }, home, cal, book, about, EPOCH, KEY, G };
+window.__gg = { startRun, mode: () => MODE, load, save, todayKey, dayNo, lateDays, ACH, achGot, nextAch, tally, shareText, streak, endlessList, practiceList, catList, TIPS, cur: () => cur, play: (m) => { if (m) MODE = m; play(); }, home, cal, book, about, EPOCH, KEY, G };
 home();
 if ("serviceWorker" in navigator && location.protocol === "https:" && /github\.io$/.test(location.hostname)) navigator.serviceWorker.register("sw.js").catch(() => {});
 </script>

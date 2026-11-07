@@ -285,12 +285,41 @@ try {
     const total = G.KINDS.reduce((a, k) => a + G.combos(k.id).length, 0);
     check("とことんの並び（300回）：同じ組を出さない・同じ記号を続けない・前の並びの最後の記号から始めない・全部の組が入る", r.bad.length === 0 && r.len === total, `${r.bad.slice(0, 5).join(",")} 長さ${r.len}/${total}`);
     // 記録の形を直す：細工した値を画面に HTML として出さない
-    await q.evaluate(() => { const s = JSON.parse(localStorage.getItem("chizu-v1")) || { v: 1 }; s.ebest = '<img id="xss" src=x>'; s.dex = { 3: '"><b id="xss2">', constructor: 1, 99999: 1 }; s.runs = { h: { list: "bad", res: [] }, p: { mode: "p", id: "y", date: "2026-11-07", list: ["constructor|1|x"], res: [] }, d: { mode: "d", id: "z", date: "x", list: ["g0|1|x"], res: [] }, "a:2026-11-07": { mode: "a", id: "a1", date: "2026-11-07", list: ["g0|1|x", "g0|2|x"], res: [{ m: 0 }], cur: { i: 1, tag: "g0|2|x", wrong: "x", hints: 0 } }, e: { mode: "e", id: "e", date: "2026-11-07", list: ["b1|2|x", "g0|99999|x"], res: [] }, x: { id: "x", date: "2026-11-07", list: ["g0|1|x"], res: [{ m: 0 }] }, "a:2026-11-01": { mode: "d", id: "w", date: "2026-11-07", list: ["g0|1|x"], res: [] } }; s.days = { "2026-11-07": { m: "x" }, bad: { m: [0] }, "2026-02-30": { m: [0] } }; localStorage.setItem("chizu-v1", JSON.stringify(s)); });
+    await q.evaluate(() => { const s = JSON.parse(localStorage.getItem("chizu-v1")) || { v: 1 }; s.ebest = '<img id="xss" src=x>'; s.dex = { 3: '"><b id="xss2">', constructor: 1, 99999: 1 }; s.runs = { h: { list: "bad", res: [] }, p: { mode: "p", id: "y", date: "2026-11-07", list: ["constructor|1|x"], res: [] }, d: { mode: "d", id: "z", date: "x", list: ["g0|1|x"], res: [] }, "a:2026-11-07": { mode: "a", id: "a1", date: "2026-11-07", list: ["g0|1|x", "g0|2|x", "g0|3|x", "g0|4|x", "g0|5|x"], res: [{ m: 0 }], cur: { i: 1, tag: "g0|2|x", wrong: "x", hints: 0 } }, e: { mode: "e", id: "e", date: "2026-11-07", list: ["b1|2|x", "g0|99999|x"], res: [] }, x: { id: "x", date: "2026-11-07", list: ["g0|1|x"], res: [{ m: 0 }] }, "a:2026-11-01": { mode: "d", id: "w", date: "2026-11-07", list: ["g0|1|x"], res: [] } }; s.days = { "2026-11-07": { m: "x" }, bad: { m: [0] }, "2026-02-30": { m: [0] } }; localStorage.setItem("chizu-v1", JSON.stringify(s)); });
     await q.reload(); await q.waitForTimeout(250);
     const st = await q.evaluate(() => __gg.load());
     check("記録の形を直す：数の所の文字は0に・知らない記号・形のちがう途中経過（モードの無いもの・置き場所とモードが合わないものも）と日ごとの記録は捨てる", st.ebest === 0 && st.dex[3] === 0 && !Object.hasOwn(st.dex, "constructor") && !Object.hasOwn(st.dex, "99999") && !("h" in st.runs) && !("p" in st.runs) && !("d" in st.runs) && !("e" in st.runs) && !("x" in st.runs) && !("a:2026-11-01" in st.runs) && st.runs["a:2026-11-07"] && st.runs["a:2026-11-07"].cur === null && Object.keys(st.days).length === 0, JSON.stringify(st).slice(0, 380));
     await q.click("#go-dex").catch(() => {}); await q.waitForTimeout(150);
     check("記録の文字を HTML として出さない", await q.locator("#xss, #xss2").count() === 0);
+    await q.context().close();
+  }
+
+  // 引き継ぎで入った記録の形を直す（2026-11-07 CodeRabbit の指摘）・前の日の終えた回を上書きする前に記録する
+  {
+    const q = await newPage(); await closeHow(q);
+    const y = dayBefore(1), tags = G.dailyTags(y);
+    await q.evaluate(([y, tags, today]) => { localStorage.setItem("chizu-v1", JSON.stringify({ v: 1, tut: true, ebest: { toString: 0 }, dex: { "03": 1, 4: 1 }, days: { [today]: { m: [] } }, hdays: {}, adays: {}, kofi: {}, ach: {}, runs: { p: { mode: "p", id: "p1", date: today, list: [], res: [] }, e: { mode: "e", id: "e1", date: today, list: ["g2|0|x"], res: [] } } })); }, [y, tags, TODAY]);
+    await q.reload(); await q.waitForTimeout(200);
+    const st = await q.evaluate(() => __gg.load());
+    check("記録の形を直す：数にできない値は0・記号の番号は 03 のような形を捨てる・形のわけの無い記号の形のわけの札・空の記録と空の途中経過を捨てる", st.ebest === 0 && !("03" in st.dex) && st.dex[4] === 1 && !st.days[TODAY] && !("p" in st.runs) && !("e" in st.runs) && await q.locator("#go-d").count() === 1, JSON.stringify(st).slice(0, 300));
+    await q.evaluate(([y, tags]) => { const s = JSON.parse(localStorage.getItem("chizu-v1")); s.days = {}; s.runs.d = { mode: "d", id: "y1", date: y, list: tags, res: tags.map(() => ({ m: 0 })), cur: null }; localStorage.setItem("chizu-v1", JSON.stringify(s)); __gg.startRun("d"); }, [y, tags]);
+    await q.waitForTimeout(100);
+    const s2 = await q.evaluate(() => __gg.load());
+    check("前の日の終えた回は、今日の回で上書きする前に記録に入る", !!s2.days[y] && s2.runs.d && s2.runs.d.date === TODAY);
+    await q.context().close();
+  }
+  // 「🔊 読む」の文：記号の形と選び肢を読み、記号さがしではほかの選び肢の名前を言わない
+  {
+    const q = await newPage(); await closeHow(q);
+    const bad = [];
+    for (const k of ["g0", "b1", "g2"]) {
+      const x = G.SYMS.find((s) => s.k && s.id !== "shiyakusho"), P = G.make(`${k}|${x.i}|say`);
+      const say = await q.evaluate(([k, i]) => { __gg.save((s2) => { s2.runs.p = { mode: "p", id: "say" + k, date: new Date(Date.now() + 9 * 3600e3).toISOString().slice(0, 10), list: Array(5).fill(`${k}|${i}|say`), res: [] }; }); __gg.play("p"); return document.querySelector("[data-a11y-say]").getAttribute("aria-label"); }, [k, x.i]);
+      const names = P.opts.map((v) => G.SYMS[v].n);
+      if (k === "b1") { if (!P.opts.every((v) => say.includes(G.SYMS[v].alt)) || names.some((n) => n !== x.n && say.includes(n))) bad.push(k); }
+      else if (!say.includes(x.alt) || !P.opts.every((v) => say.includes(k === "g2" ? G.SYMS[v].k : G.SYMS[v].n))) bad.push(k);
+    }
+    check("「🔊 読む」は記号の形と選び肢も読む（記号さがしではほかの選び肢の名前を言わない）", bad.length === 0, bad.join(","));
     await q.context().close();
   }
 
